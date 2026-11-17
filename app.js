@@ -1,143 +1,861 @@
-const STORAGE_KEY = 'orbit-studio-v1';
-const AGENTS = [
-  { id: 'ceo', name: 'CEO Agent', icon: '✦', role: 'Company leadership', description: 'Oversees the studio, balances priorities, and keeps delivery aligned with client goals.' },
-  { id: 'pm', name: 'Project Manager', icon: '◷', role: 'Planning & coordination', description: 'Turns client briefs into scoped plans, milestones, and clear work assignments.' },
-  { id: 'design', name: 'UI/UX Designer', icon: '◈', role: 'Product design', description: 'Shapes user journeys, interface direction, and practical design specifications.' },
-  { id: 'frontend', name: 'Frontend Developer', icon: '⌘', role: 'Client applications', description: 'Builds responsive interfaces and connects them to application services.' },
-  { id: 'backend', name: 'Backend Developer', icon: '⟡', role: 'APIs & data', description: 'Designs APIs, data models, business logic, and secure service foundations.' },
-  { id: 'ai', name: 'AI Engineer', icon: '✳', role: 'AI & automation', description: 'Plans model integrations, intelligent features, and responsible automation.' },
-  { id: 'qa', name: 'QA Testing', icon: '✓', role: 'Quality assurance', description: 'Checks requirements, scenarios, accessibility, and release readiness.' },
-  { id: 'debug', name: 'Debugging Agent', icon: '⌕', role: 'Issue resolution', description: 'Investigates reported defects and coordinates fixes and retesting.' },
-  { id: 'docs', name: 'Documentation', icon: '▤', role: 'Technical writing', description: 'Prepares setup notes, technical references, and clear user guidance.' }
-];
-const WORKFLOW = ['Receive client brief', 'Analyse requirements', 'Plan scope & tasks', 'Assign specialist work', 'Build & integrate', 'Test and fix issues', 'Final quality review', 'Prepare deliverables', 'Client handoff'];
-const PLAN = [
-  ['Confirm scope and acceptance criteria', 'pm'], ['Map user journeys and interface requirements', 'design'], ['Define technical architecture and data model', 'backend'], ['Build core user interface', 'frontend'], ['Implement services and business logic', 'backend'], ['Integrate AI and automation requirements', 'ai'], ['Test key flows and report issues', 'qa'], ['Resolve defects and retest', 'debug'], ['Prepare setup and handoff documentation', 'docs']
-];
-const STATUS_FLOW = ['todo', 'in-progress', 'review', 'done'];
-const STATUS_LABELS = { planning: 'Planning', active: 'In progress', completed: 'Completed', 'on-hold': 'On hold' };
-const TASK_LABELS = { todo: 'To do', 'in-progress': 'In progress', review: 'In review', done: 'Done' };
-const initials = (value) => String(value || '').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'AI';
-const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-const byId = (id) => document.getElementById(id);
-const nowLabel = () => new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
+:root {
+  --bg: #0e1117;
+  --bg-2: #141b28;
+  --panel: #171f2d;
+  --panel-soft: #1d2839;
+  --panel-alt: #111827;
+  --line: rgba(148, 163, 184, 0.18);
+  --text: #edf2ff;
+  --muted: #a9b4c5;
+  --purple: #9b8cff;
+  --purple-strong: #7d6cff;
+  --green: #52d9a7;
+  --blue: #75b9ff;
+  --orange: #f7b86d;
+  --red: #ff8e8e;
+  --shadow: 0 18px 40px rgba(4, 7, 16, 0.4);
+}
 
-function seededData() {
-  const date = (offset) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toISOString().slice(0, 10); };
-  return {
-    projects: [
-      { id: 'p-1001', name: 'Mindful Moments', client: 'Kindred Health', email: '', type: 'Mobile app', deadline: date(24), budget: 24000, requirements: 'A calm, accessible mindfulness app with guided sessions, habit tracking, and a simple progress view. Prioritise a friendly onboarding experience and clear privacy expectations.', status: 'active', createdAt: new Date().toISOString(), tasks: PLAN.map(([title, agent], i) => ({ id: `t-1001-${i}`, title, agent, status: ['done', 'done', 'done', 'in-progress', 'todo', 'todo', 'todo', 'todo', 'todo'][i] })), bugs: [] },
-      { id: 'p-1002', name: 'Fieldnotes Commerce', client: 'Fieldnotes Supply', email: '', type: 'Web application', deadline: date(38), budget: 18000, requirements: 'A streamlined online shop for a small outdoor goods brand. Include product discovery, a responsive catalog, and a simple admin workflow.', status: 'active', createdAt: new Date().toISOString(), tasks: PLAN.map(([title, agent], i) => ({ id: `t-1002-${i}`, title, agent, status: ['done', 'done', 'in-progress', 'todo', 'todo', 'todo', 'todo', 'todo', 'todo'][i] })), bugs: [{ id: 'b-1002-1', title: 'Mobile filter panel needs a close control', status: 'open', createdAt: new Date().toISOString() }] },
-      { id: 'p-1003', name: 'Atlas Support Assistant', client: 'Atlas Logistics', email: '', type: 'AI application', deadline: date(8), budget: 32000, requirements: 'A support assistant concept that helps staff find answers in internal procedures. Include clear source references and a human handoff path.', status: 'planning', createdAt: new Date().toISOString(), tasks: PLAN.map(([title, agent], i) => ({ id: `t-1003-${i}`, title, agent, status: i === 0 ? 'in-progress' : 'todo' })), bugs: [] }
-    ],
-    activity: [
-      { id: 'a1', agent: 'pm', text: 'created a delivery plan for', project: 'Atlas Support Assistant', at: new Date(Date.now() - 6 * 60000).toISOString() },
-      { id: 'a2', agent: 'qa', text: 'reported an issue on', project: 'Fieldnotes Commerce', at: new Date(Date.now() - 34 * 60000).toISOString() },
-      { id: 'a3', agent: 'design', text: 'completed interface requirements for', project: 'Mindful Moments', at: new Date(Date.now() - 95 * 60000).toISOString() },
-      { id: 'a4', agent: 'frontend', text: 'started a new task on', project: 'Mindful Moments', at: new Date(Date.now() - 145 * 60000).toISOString() }
-    ]
-  };
+* {
+  box-sizing: border-box;
 }
-function loadData() {
-  try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); if (saved && Array.isArray(saved.projects) && Array.isArray(saved.activity)) return saved; } catch (error) { console.warn('Could not read saved workspace data.', error); }
-  return seededData();
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, var(--bg) 0%, #0a0d16 100%);
+  color: var(--text);
+  font-family: "Inter", sans-serif;
 }
-let data = loadData();
-let toastTimer;
-function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (error) { console.warn('Could not save workspace data.', error); showToast('Could not save changes in this browser.'); } }
-function getAgent(id) { return AGENTS.find((agent) => agent.id === id) || AGENTS[0]; }
-function getProject(id) { return data.projects.find((project) => project.id === id); }
-function progress(project) { return project.tasks.length ? Math.round(project.tasks.filter((task) => task.status === 'done').length / project.tasks.length * 100) : 0; }
-function allTasks() { return data.projects.flatMap((project) => project.tasks.map((task) => ({ ...task, projectId: project.id, projectName: project.name, client: project.client }))); }
-function addActivity(agent, text, project) { data.activity.unshift({ id: `a-${Date.now()}`, agent, text, project, at: new Date().toISOString() }); data.activity = data.activity.slice(0, 15); }
-function formatDate(value) { if (!value) return 'No deadline'; const parsed = new Date(`${value}T12:00:00`); return Number.isNaN(parsed.getTime()) ? 'No deadline' : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed); }
-function formatRelative(value) { const mins = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000)); if (mins < 1) return 'just now'; if (mins < 60) return `${mins} min ago`; if (mins < 1440) return `${Math.floor(mins / 60)} hr ago`; return `${Math.floor(mins / 1440)} days ago`; }
-function statusClass(status) { return status === 'active' ? 'status-active' : status === 'planning' ? 'status-planning' : status === 'completed' ? 'status-completed' : 'status-on-hold'; }
-function showToast(message) { const toast = byId('toast'); toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 2600); }
-function renderStats() {
-  const projects = data.projects;
-  const tasks = allTasks();
-  const stats = [
-    ['Active projects', projects.filter((p) => p.status === 'active').length, 'Across your studio', '▣'],
-    ['Completed projects', projects.filter((p) => p.status === 'completed').length, 'Ready for client handoff', '✓'],
-    ['Open tasks', tasks.filter((t) => t.status !== 'done').length, `${tasks.filter((t) => t.status === 'review').length} awaiting review`, '☷'],
-    ['Open bugs', projects.reduce((total, p) => total + p.bugs.filter((bug) => bug.status === 'open').length, 0), 'Tracked across projects', '⌕']
-  ];
-  byId('stats-grid').innerHTML = stats.map(([label, value, foot, icon]) => `<article class="stat-card"><div class="stat-top">${label}<span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-foot">${foot}</div></article>`).join('');
-  byId('project-nav-count').textContent = projects.length;
+
+button, input, select, textarea {
+  font: inherit;
 }
-function renderProjectRow(project) { return `<div class="project-row" data-project="${escapeHTML(project.id)}"><div><div class="project-name">${escapeHTML(project.name)}</div><div class="project-client">${escapeHTML(project.client)}</div></div><div><div class="progress-track"><div class="progress-fill" style="width:${progress(project)}%"></div></div><div class="progress-label">${progress(project)}% complete</div></div><span class="status-badge ${statusClass(project.status)}">${STATUS_LABELS[project.status]}</span></div>`; }
-function renderDashboardProjects() { const target = byId('dashboard-projects'); const projects = data.projects.filter((p) => p.status !== 'completed').slice(0, 4); target.innerHTML = projects.length ? projects.map(renderProjectRow).join('') : '<div class="empty-state"><strong>No active projects yet</strong>Create a project to get your studio moving.</div>'; }
-function renderActivity() { byId('activity-list').innerHTML = data.activity.slice(0, 5).map((item) => { const agent = getAgent(item.agent); return `<div class="activity-item"><div class="agent-avatar">${agent.icon}</div><div><div class="activity-copy"><strong>${escapeHTML(agent.name)}</strong> ${escapeHTML(item.text)} <strong>${escapeHTML(item.project)}</strong></div><div class="activity-time">${formatRelative(item.at)}</div></div></div>`; }).join('') || '<div class="empty-state">No activity yet.</div>'; }
-function renderCompactTasks() { const tasks = allTasks().filter((task) => task.status !== 'done').slice(0, 4); byId('dashboard-tasks').innerHTML = tasks.length ? tasks.map((task) => `<div class="compact-task"><span class="task-dot"></span><div class="task-copy"><strong>${escapeHTML(task.title)}</strong><small>${escapeHTML(task.projectName)} · ${escapeHTML(getAgent(task.agent).name)}</small></div></div>`).join('') : '<div class="empty-state">No pending tasks. Nice work!</div>'; }
-function renderMiniTeam() { byId('mini-team').innerHTML = AGENTS.slice(0, 6).map((agent) => `<div class="mini-agent"><span class="agent-avatar">${agent.icon}</span><span>${escapeHTML(agent.name.replace(' Agent', ''))}</span></div>`).join(''); }
-function renderProjects() {
-  const query = byId('project-search').value.trim().toLowerCase(); const filter = byId('project-filter').value;
-  const projects = data.projects.filter((project) => (filter === 'all' || (filter === 'active' ? project.status === 'active' : project.status === filter)) && `${project.name} ${project.client} ${project.type}`.toLowerCase().includes(query));
-  byId('all-projects').innerHTML = projects.length ? projects.map((project) => `<article class="project-card" data-project="${escapeHTML(project.id)}"><div class="card-type">${escapeHTML(project.type)}</div><h3>${escapeHTML(project.name)}</h3><div class="card-client">${escapeHTML(project.client)}</div><div class="card-progress-head"><span>Project progress</span><span>${progress(project)}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${progress(project)}%"></div></div><div class="card-meta"><span>${project.tasks.filter((task) => task.status === 'done').length} / ${project.tasks.length} tasks complete</span><span class="status-badge ${statusClass(project.status)}">${STATUS_LABELS[project.status]}</span></div><div class="card-meta"><span>Due ${formatDate(project.deadline)}</span><span>${project.bugs.filter((bug) => bug.status === 'open').length} open bugs</span></div></article>`).join('') : '<div class="empty-state"><strong>No matching projects</strong>Try a different search or create a new project.</div>';
+
+body {
+  min-height: 100vh;
 }
-function renderBoard() {
-  const tasks = allTasks(); const columns = [['todo', 'To do', 'todo'], ['in-progress', 'In progress', 'progress'], ['review', 'In review', 'review'], ['done', 'Done', 'done']];
-  byId('task-board').innerHTML = columns.map(([status, title, css]) => { const items = tasks.filter((task) => task.status === status); return `<section class="task-column"><div class="column-heading"><span class="column-title ${css}"><i></i>${title}</span><span class="column-count">${items.length}</span></div>${items.length ? items.map((task) => `<article class="board-task"><h3>${escapeHTML(task.title)}</h3><p>${escapeHTML(task.projectName)}</p><div class="board-task-footer"><span>${escapeHTML(getAgent(task.agent).name)}</span>${status !== 'done' ? `<button class="task-action" data-task-action="${escapeHTML(task.projectId)}|${escapeHTML(task.id)}">${status === 'todo' ? 'Start task' : status === 'in-progress' ? 'Send to review' : 'Mark done'} →</button>` : '<span>✓ Complete</span>'}</div></article>`).join('') : '<div class="empty-state">Nothing here</div>'}</section>`; }).join('');
+
+button {
+  cursor: pointer;
 }
-function renderAgents() {
-  byId('agents-grid').innerHTML = AGENTS.map((agent) => `<article class="agent-card"><div class="agent-card-top"><div class="agent-card-icon">${agent.icon}</div><div><h3>${escapeHTML(agent.name)}</h3><span class="role">${escapeHTML(agent.role)}</span></div></div><p>${escapeHTML(agent.description)}</p><span class="agent-state">Available for assignment</span></article>`).join('');
-  byId('workflow-steps').innerHTML = WORKFLOW.map((step, index) => `<div class="workflow-step"><span>STEP ${String(index + 1).padStart(2, '0')}</span><strong>${escapeHTML(step)}</strong></div>`).join('');
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
 }
-function render() { renderStats(); renderDashboardProjects(); renderActivity(); renderCompactTasks(); renderMiniTeam(); renderProjects(); renderBoard(); renderAgents(); }
-function setView(name) { document.querySelectorAll('.view').forEach((view) => view.classList.toggle('active', view.id === `view-${name}`)); document.querySelectorAll('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.view === name)); const active = document.querySelector(`.nav-link[data-view="${name}"]`); byId('breadcrumb-current').textContent = active ? active.textContent.trim().replace(/\d+$/, '').trim() : 'Overview'; window.scrollTo({ top: 0, behavior: 'smooth' }); }
-function openProjectModal() { byId('project-modal').hidden = false; setTimeout(() => byId('project-form').elements.name.focus(), 0); }
-function closeModal() { byId('project-modal').hidden = true; }
-function taskStatusSelect(projectId, task) { return `<select aria-label="Status for ${escapeHTML(task.title)}" data-task-status="${escapeHTML(projectId)}|${escapeHTML(task.id)}">${STATUS_FLOW.map((status) => `<option value="${status}" ${task.status === status ? 'selected' : ''}>${TASK_LABELS[status]}</option>`).join('')}</select>`; }
-function openDetails(projectId) {
-  const project = getProject(projectId); if (!project) return;
-  byId('detail-header').innerHTML = `<div><div class="detail-tags"><span class="status-badge ${statusClass(project.status)}">${STATUS_LABELS[project.status]}</span><span class="card-type">${escapeHTML(project.type)}</span></div><h2 id="detail-title">${escapeHTML(project.name)}</h2><p>${escapeHTML(project.client)}</p></div>`;
-  const tasks = project.tasks.map((task) => `<div class="detail-task-row"><span>${escapeHTML(task.title)}<br><small>${escapeHTML(getAgent(task.agent).name)}</small></span>${taskStatusSelect(project.id, task)}<small>${TASK_LABELS[task.status]}</small></div>`).join('');
-  const bugs = project.bugs.map((bug) => `<div class="bug-row"><div>${escapeHTML(bug.title)}<small>${bug.status === 'open' ? 'Open · assigned to Debugging Agent' : 'Resolved'} · ${formatRelative(bug.createdAt)}</small></div>${bug.status === 'open' ? `<button class="bug-button" data-resolve-bug="${escapeHTML(project.id)}|${escapeHTML(bug.id)}">Resolve</button>` : '<span class="status-badge status-completed">Resolved</span>'}</div>`).join('');
-  byId('detail-body').innerHTML = `<div class="detail-meta"><span>Due ${formatDate(project.deadline)}</span><span>${project.budget ? `$${Number(project.budget).toLocaleString()} budget` : 'Budget not set'}</span><span>${progress(project)}% complete</span></div><div class="progress-track"><div class="progress-fill" style="width:${progress(project)}%"></div></div><p class="detail-overview">${escapeHTML(project.requirements)}</p><section class="detail-section"><h3>Project tasks <span class="column-count">${project.tasks.filter((task) => task.status === 'done').length}/${project.tasks.length}</span></h3>${tasks || '<div class="empty-state">No tasks assigned.</div>'}</section><section class="detail-section"><div class="panel-heading"><h3>Bugs & issues</h3><button class="bug-button" data-report-bug="${escapeHTML(project.id)}">＋ Report bug</button></div>${bugs || '<div class="empty-state">No bugs reported. Keep it that way!</div>'}</section><section class="detail-section"><h3>Delivery status</h3><div class="detail-meta"><span>Project status</span><select data-project-status="${escapeHTML(project.id)}" aria-label="Project status">${Object.entries(STATUS_LABELS).map(([key, label]) => `<option value="${key}" ${project.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div></section>`;
-  byId('detail-modal').hidden = false;
+
+.sidebar {
+  width: 242px;
+  background: rgba(14, 17, 23, 0.9);
+  border-right: 1px solid var(--line);
+  padding: 26px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
-function createProject(form) {
-  const values = new FormData(form); const name = String(values.get('name')).trim(); const client = String(values.get('client')).trim(); const requirements = String(values.get('requirements')).trim();
-  if (!name || !client || requirements.length < 10) { showToast('Please complete the required project details.'); return; }
-  const project = { id: `p-${Date.now()}`, name, client, email: String(values.get('email') || '').trim(), type: String(values.get('type')), deadline: String(values.get('deadline') || ''), budget: Number(values.get('budget')) || 0, requirements, status: 'planning', createdAt: new Date().toISOString(), tasks: PLAN.map(([title, agent], i) => ({ id: `t-${Date.now()}-${i}`, title, agent, status: 'todo' })), bugs: [] };
-  data.projects.unshift(project); addActivity('pm', 'created a delivery plan for', project.name); save(); form.reset(); closeModal(); render(); setView('projects'); showToast('Project plan created and saved in this browser.');
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px 12px;
 }
-function findTask(projectId, taskId) { const project = getProject(projectId); return { project, task: project?.tasks.find((task) => task.id === taskId) }; }
-function updateTask(projectId, taskId, status) {
-  const { project, task } = findTask(projectId, taskId); if (!project || !task || !STATUS_FLOW.includes(status)) return;
-  const oldStatus = task.status; task.status = status;
-  const agentId = status === 'review' ? 'qa' : status === 'done' ? 'pm' : task.agent;
-  addActivity(agentId, `${status === 'done' ? 'completed' : status === 'review' ? 'sent for review' : status === 'in-progress' ? 'started' : 'updated'} a task on`, project.name);
-  if (project.tasks.every((item) => item.status === 'done')) { project.status = 'completed'; addActivity('ceo', 'marked the project ready for handoff:', project.name); showToast('All tasks complete — project marked completed.'); }
-  else if (project.status === 'planning' && status === 'in-progress') project.status = 'active';
-  else if (project.status === 'completed' && oldStatus !== 'done') project.status = 'active';
-  save(); render(); if (!byId('detail-modal').hidden) openDetails(projectId);
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #bcaeff, #7464ff);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #130f23;
 }
-function reportBug(projectId) {
-  const project = getProject(projectId); if (!project) return;
-  const title = window.prompt('Describe the bug or issue:'); if (!title || !title.trim()) return;
-  project.bugs.unshift({ id: `b-${Date.now()}`, title: title.trim().slice(0, 180), status: 'open', createdAt: new Date().toISOString() }); addActivity('qa', 'reported an issue on', project.name); save(); render(); openDetails(projectId); showToast('Issue added to the project.');
+
+.brand-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
-function handleAction(event) {
-  const nav = event.target.closest('[data-view]'); if (nav) { setView(nav.dataset.view); return; }
-  const navShortcut = event.target.closest('[data-nav]'); if (navShortcut) { setView(navShortcut.dataset.nav); return; }
-  if (event.target.closest('[data-open-project]')) { openProjectModal(); return; }
-  if (event.target.closest('[data-close-modal]')) { closeModal(); return; }
-  if (event.target.closest('[data-close-detail]')) { byId('detail-modal').hidden = true; return; }
-  const projectCard = event.target.closest('[data-project]'); if (projectCard) { openDetails(projectCard.dataset.project); return; }
-  const taskAction = event.target.closest('[data-task-action]'); if (taskAction) { const [projectId, taskId] = taskAction.dataset.taskAction.split('|'); const { task } = findTask(projectId, taskId); if (task) updateTask(projectId, taskId, STATUS_FLOW[Math.min(STATUS_FLOW.indexOf(task.status) + 1, STATUS_FLOW.length - 1)]); return; }
-  const bugAction = event.target.closest('[data-report-bug]'); if (bugAction) { reportBug(bugAction.dataset.reportBug); return; }
-  const resolveBug = event.target.closest('[data-resolve-bug]'); if (resolveBug) { const [projectId, bugId] = resolveBug.dataset.resolveBug.split('|'); const project = getProject(projectId); const bug = project?.bugs.find((item) => item.id === bugId); if (bug) { bug.status = 'resolved'; addActivity('debug', 'resolved an issue on', project.name); save(); render(); openDetails(projectId); showToast('Issue marked as resolved.'); } return; }
+
+.brand-subtitle {
+  font-size: 0.58rem;
+  letter-spacing: 0.19em;
+  color: var(--muted);
 }
-document.addEventListener('click', handleAction);
-byId('project-form').addEventListener('submit', (event) => { event.preventDefault(); createProject(event.currentTarget); });
-byId('project-search').addEventListener('input', renderProjects);
-byId('project-filter').addEventListener('change', renderProjects);
-document.addEventListener('change', (event) => {
-  if (event.target.matches('[data-task-status]')) { const [projectId, taskId] = event.target.dataset.taskStatus.split('|'); updateTask(projectId, taskId, event.target.value); }
-  if (event.target.matches('[data-project-status]')) { const project = getProject(event.target.dataset.projectStatus); if (project) { project.status = event.target.value; addActivity('pm', `updated project status for`, project.name); save(); render(); openDetails(project.id); showToast('Project status updated.'); } }
-});
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeModal(); byId('detail-modal').hidden = true; } });
-[byId('project-modal'), byId('detail-modal')].forEach((backdrop) => backdrop.addEventListener('click', (event) => { if (event.target === backdrop) backdrop.hidden = true; }));
-render();
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-header {
+  text-transform: uppercase;
+  font-size: 0.63rem;
+  letter-spacing: 0.16em;
+  padding: 0 8px 6px;
+  color: #7f8aa1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #dfe7f6;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 0.9rem;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  border-color: rgba(155, 140, 255, 0.35);
+  background: rgba(155, 140, 255, 0.11);
+}
+
+.nav-item b {
+  min-width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.sidebar-card {
+  margin-top: auto;
+  padding: 16px 14px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(123, 106, 255, 0.18), rgba(19, 27, 39, 0.8));
+  border: 1px solid rgba(155, 140, 255, 0.22);
+}
+
+.sidebar-card-label {
+  color: #c7d5ff;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  margin-bottom: 8px;
+}
+
+.sidebar-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  padding: 18px 28px 34px;
+}
+
+.topbar {
+  height: 62px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.77rem;
+}
+
+.crumbs strong {
+  color: var(--text);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  padding: 8px 10px;
+  background: rgba(148, 163, 184, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(82, 217, 167, 0.9);
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(148, 163, 184, 0.04);
+  color: var(--text);
+}
+
+.avatar-mini {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #dbd5ff;
+  background: linear-gradient(135deg, rgba(155, 140, 255, 0.75), rgba(125, 108, 255, 0.4));
+}
+
+.view {
+  display: none;
+  padding-top: 24px;
+}
+
+.view.active {
+  display: block;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8895ae;
+  font-size: 0.6rem;
+  margin-bottom: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 2vw, 2.4rem);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.primary-btn, .secondary-btn, .link-btn {
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 10px 14px;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, var(--purple), var(--purple-strong));
+  color: #111827;
+}
+
+.primary-btn:hover {
+  filter: brightness(1.05);
+}
+
+.secondary-btn {
+  background: rgba(148, 163, 184, 0.05);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.link-btn {
+  background: transparent;
+  border-color: rgba(155, 140, 255, 0.22);
+  color: #d4cbff;
+  padding: 7px 10px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.stat-card {
+  background: linear-gradient(180deg, rgba(23, 31, 45, 0.9), rgba(17, 24, 39, 0.8));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  min-height: 118px;
+}
+
+.stat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(155, 140, 255, 0.12);
+  color: #dcd2ff;
+}
+
+.stat-value {
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-weight: 800;
+  margin-bottom: 4px;
+  letter-spacing: -0.04em;
+}
+
+.stat-foot {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  gap: 16px;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(23, 31, 45, 0.96), rgba(17, 24, 39, 0.94));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.wide-panel {
+  grid-column: 1 / 2;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.small-title {
+  color: #8a96ac;
+  letter-spacing: 0.16em;
+  font-size: 0.58rem;
+  margin-bottom: 6px;
+}
+
+.stack-list,
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-item, .activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.request-item:first-child, .activity-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.request-badge {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: rgba(155, 140, 255, 0.12);
+  color: #d9d1ff;
+  font-size: 0.8rem;
+}
+
+.request-copy strong, .activity-copy strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #edf2ff;
+}
+
+.request-copy p, .activity-copy p, .tiny-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.mini-team {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mini-agent {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.02);
+}
+
+.mini-agent .chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: rgba(155, 140, 255, 0.12);
+  color: #d7d0ff;
+  font-size: 0.78rem;
+}
+
+.mini-agent small {
+  color: var(--muted);
+  display: block;
+}
+
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.progress-item {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.progress-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--purple), var(--blue));
+}
+
+.project-grid, .client-grid, .agent-grid, .workflow-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.project-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.client-grid {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.agent-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.workflow-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(23, 31, 45, 0.96), rgba(17, 24, 39, 0.94));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.project-tag,
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.project-tag {
+  background: rgba(155, 140, 255, 0.12);
+  color: #ddd4ff;
+}
+
+.status-tag.active {
+  background: rgba(82, 217, 167, 0.12);
+  color: #8fe9c8;
+}
+
+.status-tag.planning {
+  background: rgba(117, 185, 255, 0.12);
+  color: #9ecbff;
+}
+
+.status-tag.completed {
+  background: rgba(82, 217, 167, 0.12);
+  color: #8fe9c8;
+}
+
+.project-card h3, .client-card h3, .agent-card h3 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.client-card p, .agent-card p, .project-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.client-card .meta-row, .agent-card .meta-row {
+  margin-top: 12px;
+}
+
+.workflow-step {
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(155, 140, 255, 0.08);
+  border: 1px solid rgba(155, 140, 255, 0.18);
+}
+
+.workflow-step small {
+  display: inline-block;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  color: #c7d5ff;
+  margin-bottom: 10px;
+}
+
+.workflow-step h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(155, 140, 255, 0.12);
+  color: #d9d2ff;
+  font-size: 1.2rem;
+}
+
+.agent-role {
+  color: var(--muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9be7cb;
+  font-size: 0.74rem;
+}
+
+.agent-status::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(380px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.04);
+  padding: 0 12px;
+  color: var(--muted);
+}
+
+.search-box input, .toolbar select {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  padding: 12px 0;
+}
+
+.toolbar select {
+  width: 180px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.04);
+  padding: 0 12px;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 9, 15, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+  padding: 20px;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: min(720px, 100%);
+  background: linear-gradient(180deg, rgba(22, 31, 45, 1), rgba(14, 19, 30, 1));
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 1.4rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+label {
+  display: block;
+  color: #dfe7f6;
+  font-size: 0.77rem;
+  margin-bottom: 12px;
+}
+
+input, select, textarea {
+  margin-top: 7px;
+  width: 100%;
+  background: rgba(15, 22, 30, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  color: var(--text);
+  padding: 11px 12px;
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(155, 140, 255, 0.5);
+  box-shadow: 0 0 0 3px rgba(155, 140, 255, 0.12);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 118px;
+}
+
+.approval-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(155, 140, 255, 0.2);
+  background: rgba(155, 140, 255, 0.08);
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  min-width: 190px;
+  background: rgba(17, 24, 39, 0.96);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: 0.2s ease;
+  pointer-events: none;
+  font-size: 0.76rem;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.empty-state {
+  padding: 18px 10px 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .sidebar {
+    width: 190px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    display: block;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+  }
+
+  .nav-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main-area {
+    padding: 16px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .toolbar select {
+    width: 100%;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
